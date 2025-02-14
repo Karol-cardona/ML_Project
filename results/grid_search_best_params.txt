@@ -1,0 +1,10 @@
+Best Hyperparameters:
+n_hidden: [5]
+learning_rate: 0.05
+reg_lambda: 0.0
+dropout_rate: 0.0
+activation: tanh
+optimizer: adam
+lr_decay: 0.0
+batch_size: 16
+Validation Loss: 0.000278
