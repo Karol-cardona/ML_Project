@@ -6,7 +6,8 @@ import os
 class MatrixMLP:
     """
     Matrix-based implementation of a Multilayer Perceptron (MLP).
-    Supports various activation functions, weight initializations, and optimizers.
+    This simulator supports various activation functions, weight initializations,
+    and optimizers. It uses mini-batch gradient descent with optional early stopping.
     """
     def __init__(self, n_inputs, n_hidden, n_outputs,
                  activation='relu', output_activation='softmax',
@@ -16,7 +17,7 @@ class MatrixMLP:
                  weight_init='range', init_range=(-0.7, 0.7),
                  early_stopping=True, patience=10, validation_data=None):
         """
-        Initialize the MLP with specified hyperparameters.
+        Initialize the MLP with the specified hyperparameters.
         """
         self.n_inputs = n_inputs
         self.n_hidden = n_hidden if isinstance(n_hidden, list) else [n_hidden]
@@ -38,7 +39,7 @@ class MatrixMLP:
         self.early_stopping = early_stopping
         self.patience = patience
 
-        # Initialize lists for tracking training and validation metrics
+        # Lists for tracking performance over epochs.
         self.train_losses = []
         self.val_losses = []
         self.train_accuracies = []
@@ -48,24 +49,24 @@ class MatrixMLP:
         self.best_weights = None
         self.best_biases = None
 
-        # For reproducibility, set a fixed random seed
+        # Set random seed for reproducibility.
         np.random.seed(1)
 
-        # Build the network layer sizes list
+        # Build the network architecture.
         layer_sizes = [self.n_inputs] + self.n_hidden + [self.n_outputs]
 
-        # Initialize weights and biases for each layer
+        # Initialize weights and biases.
         self.weights = self._initialize_weights(layer_sizes)
         self.biases = [np.zeros((1, size)) for size in layer_sizes[1:]]
 
-        # Ensure the output layer has the correct number of outputs
+        # Check that output layer weights have the correct shape.
         if self.weights[-1].shape[1] != self.n_outputs:
             self.weights[-1] = np.random.randn(self.weights[-1].shape[0], self.n_outputs)
             if self.weight_init == 'orthogonal':
                 u, _, v = np.linalg.svd(self.weights[-1], full_matrices=False)
                 self.weights[-1] = u if u.shape == self.weights[-1].shape else v
 
-        # Initialize optimizer-specific variables (for Adam or SGD with momentum)
+        # Optimizer-specific initialization.
         if self.optimizer == 'adam':
             self.adam_m = [np.zeros_like(w) for w in self.weights]
             self.adam_v = [np.zeros_like(w) for w in self.weights]
@@ -75,7 +76,7 @@ class MatrixMLP:
 
     def _initialize_weights(self, layer_sizes):
         """
-        Initialize weights using the selected method.
+        Initialize weights based on the chosen method.
         Supported methods: 'xavier', 'he', 'glorot', 'orthogonal', 'range'.
         """
         weights = []
@@ -96,7 +97,6 @@ class MatrixMLP:
                 low, high = self.init_range
                 weight = np.random.uniform(low, high, shape)
             else:
-                # Default to glorot initialization
                 limit = np.sqrt(6. / (layer_sizes[i] + layer_sizes[i+1]))
                 weight = np.random.uniform(-limit, limit, shape)
             weights.append(weight)
@@ -118,7 +118,7 @@ class MatrixMLP:
             return np.maximum(0, x)
 
     def _activation_derivative(self, x):
-        """Compute derivative of the activation function for backpropagation."""
+        """Compute the derivative of the activation function."""
         if self.activation == 'relu':
             return (x > 0).astype(float)
         elif self.activation == 'sigmoid':
@@ -134,29 +134,26 @@ class MatrixMLP:
             return (x > 0).astype(float)
 
     def _output_activation(self, x):
-        """Apply the activation function for the output layer."""
+        """Apply the activation for the output layer."""
         if self.output_activation == 'linear':
             return x
         elif self.output_activation == 'softmax':
             exp_x = np.exp(x - np.max(x, axis=1, keepdims=True))
             return exp_x / np.sum(exp_x, axis=1, keepdims=True)
         else:
-            # Default to sigmoid (useful for binary classification)
-            return 1/(1 + np.exp(-x))
+            return 1 / (1 + np.exp(-x))  # default to sigmoid
 
     def forward(self, X, training=True):
         """
         Perform a forward pass through the network.
-        Returns the final output and a cache with intermediate values.
+        Returns the final output and a cache of intermediate results.
         """
         activations = [X]
         pre_activations = []
 
-        # Loop through layers
         for i in range(len(self.weights)):
             z = np.dot(activations[-1], self.weights[i]) + self.biases[i]
             pre_activations.append(z)
-            # Apply activation and dropout in hidden layers
             if i < len(self.weights) - 1:
                 a = self._activation(z)
                 if training:
@@ -171,7 +168,7 @@ class MatrixMLP:
 
     def _apply_dropout(self, layer_output):
         """
-        Apply dropout regularization to the layer's output.
+        Apply dropout regularization to the output of a layer.
         """
         if self.dropout_rate > 0:
             mask = np.random.rand(*layer_output.shape) > self.dropout_rate
@@ -180,7 +177,7 @@ class MatrixMLP:
 
     def compute_loss(self, y_pred, y_true):
         """
-        Compute the loss (with regularization).
+        Compute the loss with L1 and L2 regularization.
         Uses binary cross-entropy for one-sigmoid output,
         cross-entropy for softmax outputs, or MSE otherwise.
         """
@@ -203,13 +200,13 @@ class MatrixMLP:
 
     def mean_euclidean_error(self, y_true, y_pred):
         """
-        Compute Mean Euclidean Error (MEE) for evaluation.
+        Compute the Mean Euclidean Error (MEE) for evaluation.
         """
         return np.mean(np.sqrt(np.sum((y_true - y_pred)**2, axis=1)))
 
     def compute_metrics(self, y_pred, y_true):
         """
-        Compute performance metrics: accuracy, MSE, and MEE.
+        Compute key metrics: accuracy, MSE, and MEE.
         """
         if self.n_outputs > 1:
             accuracy = np.mean(np.argmax(y_pred, axis=1) == np.argmax(y_true, axis=1))
@@ -221,7 +218,7 @@ class MatrixMLP:
 
     def backward(self, cache, y_true):
         """
-        Backpropagate errors and update weights using the chosen optimizer.
+        Backpropagation: compute gradients and update weights.
         """
         activations = cache['activations']
         pre_activations = cache['pre_activations']
@@ -233,7 +230,7 @@ class MatrixMLP:
 
         for i in reversed(range(len(self.weights))):
             grad_w = np.dot(activations[i].T, delta) / m
-            grad_w += (self.reg_lambda / m) * self.weights[i]  # L2 regularization
+            grad_w += (self.reg_lambda / m) * self.weights[i]
             if self.l1_lambda > 0:
                 grad_w += (self.l1_lambda / m) * np.sign(self.weights[i])
             grad_b = np.mean(delta, axis=0, keepdims=True)
@@ -358,20 +355,20 @@ class MatrixMLP:
 
     def predict(self, X):
         """
-        Predict outputs for input data X.
+        Predict the output for given input X.
         """
         predictions, _ = self.forward(X, training=False)
         return predictions
 
     def _initialize_csv(self, csv_path):
-        """Initialize CSV log file if it does not exist."""
+        """Initialize the CSV log file if it does not exist."""
         if not os.path.exists(csv_path):
             with open(csv_path, mode='w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(["Epoch", "Train Loss", "Train Accuracy", "Validation Loss", "Validation Accuracy"])
 
     def _append_csv_log(self, csv_path, epoch, train_loss, train_acc, val_loss, val_acc):
-        """Append epoch results to the CSV log."""
+        """Append epoch results to the CSV log file."""
         with open(csv_path, mode='a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([epoch, f"{train_loss:.6f}", f"{train_acc:.4f}",
@@ -381,24 +378,41 @@ class MatrixMLP:
 def plot_learning_curve(train_losses, val_losses, train_accuracies, val_accuracies,
                         title_loss='Loss Curve', title_acc='Accuracy Curve'):
     """
-    Plot training and validation loss and accuracy curves.
+    Plot the training and validation loss and accuracy curves.
+    An optional moving average smoothing is applied to reduce choppiness.
     """
+    # Optional smoothing function using moving average
+    def smooth(data, window=5):
+        if len(data) < window:
+            return data
+        return np.convolve(data, np.ones(window)/window, mode='valid')
+
+    # Adjust smoothing_window as needed (set to 5 here)
+    smoothing_window = 5
+    smooth_train_loss = smooth(train_losses, window=smoothing_window)
+    smooth_val_loss = smooth(val_losses, window=smoothing_window) if val_losses else None
+    smooth_train_acc = smooth(train_accuracies, window=smoothing_window)
+    smooth_val_acc = smooth(val_accuracies, window=smoothing_window) if val_accuracies else None
+
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
     # Plot loss curves
-    ax1.plot(train_losses, label='Train Loss', color='blue')
-    if val_losses:
-        ax1.plot(val_losses, label='Validation Loss', color='orange')
-    ax1.set_xlabel('Epochs')
-    ax1.set_ylabel('Loss')
-    ax1.set_title(title_loss)
-    ax1.legend()
+    ax1.plot(smooth_train_loss, label='Training Loss', color='blue', linewidth=2)
+    if smooth_val_loss is not None:
+        ax1.plot(smooth_val_loss, label='Validation Loss', color='orange', linewidth=2)
+    ax1.set_xlabel('Epochs', fontsize=12)
+    ax1.set_ylabel('Loss', fontsize=12)
+    ax1.set_title(title_loss, fontsize=14)
+    ax1.legend(fontsize=10)
+
     # Plot accuracy curves
-    ax2.plot(train_accuracies, label='Train Accuracy', color='blue')
-    if val_accuracies:
-        ax2.plot(val_accuracies, label='Validation Accuracy', color='orange')
-    ax2.set_xlabel('Epochs')
-    ax2.set_ylabel('Accuracy')
-    ax2.set_title(title_acc)
-    ax2.legend()
+    ax2.plot(smooth_train_acc, label='Training Accuracy', color='blue', linewidth=2)
+    if smooth_val_acc is not None:
+        ax2.plot(smooth_val_acc, label='Validation Accuracy', color='orange', linewidth=2)
+    ax2.set_xlabel('Epochs', fontsize=12)
+    ax2.set_ylabel('Accuracy', fontsize=12)
+    ax2.set_title(title_acc, fontsize=14)
+    ax2.legend(fontsize=10)
+
     plt.tight_layout()
     plt.show()
