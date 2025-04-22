@@ -2,8 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 def plot_learning_curve(train_losses, val_losses, train_accuracies, val_accuracies,
-                        title_loss='Training vs Validation Loss',
-                        title_acc='Training vs Validation Accuracy'):
+                        title_loss='Loss Curve', title_acc='Accuracy Curve'):
     """
     Plot smoothed learning curves for loss and accuracy.
     A moving average filter is applied to reduce the fluctuation in the curves.
@@ -13,7 +12,7 @@ def plot_learning_curve(train_losses, val_losses, train_accuracies, val_accuraci
             return data
         return np.convolve(data, np.ones(window)/window, mode='valid')
 
-    smoothing_window = 5  # Adjust window size for smoother curves.
+    smoothing_window = 5
     smooth_train_loss = smooth(train_losses, window=smoothing_window)
     smooth_val_loss = smooth(val_losses, window=smoothing_window) if val_losses else None
     smooth_train_acc = smooth(train_accuracies, window=smoothing_window)

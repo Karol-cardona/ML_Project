@@ -1,10 +1,16 @@
 Best Hyperparameters:
-n_hidden: [10, 10]
-learning_rate: 0.1
+n_hidden: [4]
+learning_rate: 0.15
 reg_lambda: 0.0
+l1_lambda: 0.0
 dropout_rate: 0.0
+momentum: 0.8
 activation: tanh
 optimizer: adam
 lr_decay: 0.0
-batch_size: 16
-Validation Loss: 0.000000
+batch_size: 32
+weight_init: xavier
+init_range: (-0.5, 0.5)
+patience: 20
+Validation Loss: 0.0024745910248659807
+Validation Accuracy: 1.0

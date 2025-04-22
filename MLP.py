@@ -1,6 +1,5 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import csv
+import numpy as np
 import os
 
 class MatrixMLP:
@@ -74,64 +73,63 @@ class MatrixMLP:
         elif self.optimizer == 'sgd' and self.momentum > 0:
             self.momentums = [np.zeros_like(w) for w in self.weights]
 
-    def _initialize_weights(self, layer_sizes):
+    def _init_weight_matrix(self, n_in, n_out):
         """
         Initialize weights based on the chosen method.
         Supported methods: 'xavier', 'he', 'glorot', 'orthogonal', 'range'.
         """
-        weights = []
-        for i in range(len(layer_sizes) - 1):
-            shape = (layer_sizes[i], layer_sizes[i+1])
-            if self.weight_init == 'xavier':
-                weight = np.random.randn(*shape) * np.sqrt(1. / layer_sizes[i])
-            elif self.weight_init == 'he':
-                weight = np.random.randn(*shape) * np.sqrt(2. / layer_sizes[i])
-            elif self.weight_init == 'glorot':
-                limit = np.sqrt(6. / (layer_sizes[i] + layer_sizes[i+1]))
-                weight = np.random.uniform(-limit, limit, shape)
-            elif self.weight_init == 'orthogonal':
-                temp = np.random.randn(*shape)
-                u, _, v = np.linalg.svd(temp, full_matrices=False)
-                weight = u if u.shape == shape else v
-            elif self.weight_init == 'range':
-                low, high = self.init_range
-                weight = np.random.uniform(low, high, shape)
-            else:
-                limit = np.sqrt(6. / (layer_sizes[i] + layer_sizes[i+1]))
-                weight = np.random.uniform(-limit, limit, shape)
-            weights.append(weight)
-        return weights
+        if self.weight_init == 'xavier':
+            return np.random.randn(n_in, n_out) * np.sqrt(1. / n_in)
+        elif self.weight_init == 'he':
+            return np.random.randn(n_in, n_out) * np.sqrt(2. / n_in)
+        elif self.weight_init == 'glorot':
+            limit = np.sqrt(6. / (n_in + n_out))
+            return np.random.uniform(-limit, limit, (n_in, n_out))
+        elif self.weight_init == 'orthogonal':
+            temp = np.random.randn(n_in, n_out)
+            u, _, v = np.linalg.svd(temp, full_matrices=False)
+            return u if u.shape == (n_in, n_out) else v
+        elif self.weight_init == 'range':
+            low, high = self.init_range
+            return np.random.uniform(low, high, (n_in, n_out))
+        else:
+            limit = np.sqrt(6. / (n_in + n_out))
+            return np.random.uniform(-limit, limit, (n_in, n_out))
+
+    def _initialize_weights(self, layer_sizes):
+        return [self._init_weight_matrix(layer_sizes[i], layer_sizes[i+1])
+                for i in range(len(layer_sizes)-1)]
 
     def _activation(self, x):
         """Apply the activation function for hidden layers."""
         if self.activation == 'relu':
             return np.maximum(0, x)
         elif self.activation == 'sigmoid':
-            return 1 / (1 + np.exp(-x))
+            return 1/(1+np.exp(-np.clip(x,-500,500)))
         elif self.activation == 'tanh':
             return np.tanh(x)
         elif self.activation == 'leaky_relu':
-            return np.where(x > 0, x, 0.01 * x)
+            return np.where(x>0, x, 0.01*x)
         elif self.activation == 'elu':
-            return np.where(x > 0, x, 0.01 * (np.exp(x) - 1))
+            return np.where(x>0, x, 0.01*(np.exp(np.clip(x,-500,500))-1))
         else:
             return np.maximum(0, x)
 
     def _activation_derivative(self, x):
         """Compute the derivative of the activation function."""
         if self.activation == 'relu':
-            return (x > 0).astype(float)
+            return (x>0).astype(float)
         elif self.activation == 'sigmoid':
-            sig = 1 / (1 + np.exp(-x))
-            return sig * (1 - sig)
+            sig = 1/(1+np.exp(-np.clip(x,-500,500)))
+            return sig*(1-sig)
         elif self.activation == 'tanh':
             return 1 - np.tanh(x)**2
         elif self.activation == 'leaky_relu':
-            return np.where(x > 0, 1, 0.01)
+            return np.where(x>0,1,0.01)
         elif self.activation == 'elu':
-            return np.where(x > 0, 1, 0.01 * np.exp(x))
+            return np.where(x>0,1,0.01*np.exp(np.clip(x,-500,500)))
         else:
-            return (x > 0).astype(float)
+            return (x>0).astype(float)
 
     def _output_activation(self, x):
         """Apply the activation for the output layer."""
@@ -141,7 +139,7 @@ class MatrixMLP:
             exp_x = np.exp(x - np.max(x, axis=1, keepdims=True))
             return exp_x / np.sum(exp_x, axis=1, keepdims=True)
         else:
-            return 1 / (1 + np.exp(-x))  # default to sigmoid
+            return 1/(1+np.exp(-np.clip(x,-500,500)))
 
     def forward(self, X, training=True):
         """
@@ -150,17 +148,16 @@ class MatrixMLP:
         """
         activations = [X]
         pre_activations = []
-
-        for i in range(len(self.weights)):
-            z = np.dot(activations[-1], self.weights[i]) + self.biases[i]
+        for i, W in enumerate(self.weights):
+            z = np.dot(activations[-1], W) + self.biases[i]
             pre_activations.append(z)
-            if i < len(self.weights) - 1:
+            if i < len(self.weights)-1:
                 a = self._activation(z)
-                if training:
+                if training and self.dropout_rate > 0:
                     a = self._apply_dropout(a)
                 activations.append(a)
             else:
-                a = self._output_activation(z) if self.output_activation in ['softmax', 'sigmoid'] else z
+                a = self._output_activation(z)
                 activations.append(a)
 
         cache = {'activations': activations, 'pre_activations': pre_activations}
@@ -168,12 +165,10 @@ class MatrixMLP:
 
     def _apply_dropout(self, layer_output):
         """
-        Apply dropout regularization to the output of a layer.
-        """
-        if self.dropout_rate > 0:
-            mask = np.random.rand(*layer_output.shape) > self.dropout_rate
-            return layer_output * mask / (1 - self.dropout_rate)
-        return layer_output
+       Apply dropout regularization to the output of a layer.
+       """
+        mask = np.random.rand(*layer_output.shape) > self.dropout_rate
+        return layer_output * mask / (1-self.dropout_rate)
 
     def compute_loss(self, y_pred, y_true):
         """
@@ -190,31 +185,24 @@ class MatrixMLP:
             y_pred_clipped = np.clip(y_pred, eps, 1 - eps)
             bce = -np.mean(y_true * np.log(y_pred_clipped) + (1 - y_true) * np.log(1 - y_pred_clipped))
             return bce + l2_loss + l1_loss
-        elif self.output_activation == 'softmax' and self.n_outputs > 1:
-            y_pred_clipped = np.clip(y_pred, eps, 1 - eps)
-            cce = -np.mean(np.sum(y_true * np.log(y_pred_clipped), axis=1))
+        elif self.output_activation == 'softmax':
+            y_pred_clipped = np.clip(y_pred, eps, 1)
+            cce = -np.mean(np.sum(y_true*np.log(y_pred_clipped), axis=1))
             return cce + l2_loss + l1_loss
         else:
-            mse = np.mean((y_pred - y_true)**2) / 2
+            mse = np.mean((y_pred-y_true)**2)/2
             return mse + l2_loss + l1_loss
-
-    def mean_euclidean_error(self, y_true, y_pred):
-        """
-        Compute the Mean Euclidean Error (MEE) for evaluation.
-        """
-        return np.mean(np.sqrt(np.sum((y_true - y_pred)**2, axis=1)))
 
     def compute_metrics(self, y_pred, y_true):
         """
         Compute key metrics: accuracy, MSE, and MEE.
         """
         if self.n_outputs > 1:
-            accuracy = np.mean(np.argmax(y_pred, axis=1) == np.argmax(y_true, axis=1))
+            accuracy = np.mean(np.argmax(y_pred, axis=1)==np.argmax(y_true, axis=1))
         else:
-            accuracy = np.mean((y_pred >= 0.5).astype(int) == y_true)
-        mse = np.mean((y_pred - y_true)**2)
-        mee = self.mean_euclidean_error(y_true, y_pred)
-        return {'accuracy': accuracy, 'mse': mse, 'mee': mee}
+            accuracy = np.mean((y_pred>=0.5).astype(int)==y_true)
+        mse = np.mean((y_pred-y_true)**2)
+        return {'accuracy': accuracy, 'mse': mse}
 
     def backward(self, cache, y_true):
         """
@@ -229,18 +217,20 @@ class MatrixMLP:
         grad_biases = []
 
         for i in reversed(range(len(self.weights))):
-            grad_w = np.dot(activations[i].T, delta) / m
-            grad_w += (self.reg_lambda / m) * self.weights[i]
+            grad_w = np.dot(activations[i].T, delta)/m
+            grad_w += (self.reg_lambda/m)*self.weights[i]
             if self.l1_lambda > 0:
-                grad_w += (self.l1_lambda / m) * np.sign(self.weights[i])
+                grad_w += (self.l1_lambda/m)*np.sign(self.weights[i])
             grad_b = np.mean(delta, axis=0, keepdims=True)
             grad_weights.insert(0, grad_w)
             grad_biases.insert(0, grad_b)
             if i > 0:
                 d_act = self._activation_derivative(pre_activations[i-1])
                 delta = np.dot(delta, self.weights[i].T) * d_act
+        self._update_params(grad_weights, grad_biases)
 
-        # Update weights and biases
+    # Update weights and biases
+    def _update_params(self, grad_weights, grad_biases):
         for i in range(len(self.weights)):
             if self.optimizer == 'sgd':
                 if self.momentum > 0:
@@ -256,12 +246,11 @@ class MatrixMLP:
             elif self.optimizer == 'adam':
                 self.adam_t += 1
                 beta1, beta2 = self.momentum, 0.999
-                self.adam_m[i] = beta1 * self.adam_m[i] + (1 - beta1) * grad_weights[i]
-                self.adam_v[i] = beta2 * self.adam_v[i] + (1 - beta2) * (grad_weights[i]**2)
+                self.adam_m[i] = beta1 * self.adam_m[i] + (1-beta1) * grad_weights[i]
+                self.adam_v[i] = beta2 * self.adam_v[i] + (1-beta2) * (grad_weights[i]**2)
                 m_hat = self.adam_m[i] / (1 - beta1**self.adam_t)
                 v_hat = self.adam_v[i] / (1 - beta2**self.adam_t)
                 self.weights[i] -= self.learning_rate * m_hat / (np.sqrt(v_hat) + 1e-8)
-            # Bias update (common for both optimizers)
             self.biases[i] -= self.learning_rate * grad_biases[i]
 
     def train(self, X_train, y_train, epochs=100, verbose=True,
@@ -288,44 +277,32 @@ class MatrixMLP:
                 self.learning_rate = self.initial_lr / (1 + self.lr_decay * epoch)
 
             # Shuffle training data if using mini-batches
-            if self.batch_size and self.batch_size > 0:
-                indices = np.random.permutation(n_samples)
-                X_train = X_train[indices]
-                y_train = y_train[indices]
-                epoch_loss = 0.0
-                epoch_accuracy = 0.0
-                num_batches = int(np.ceil(n_samples / self.batch_size))
-                for batch in range(num_batches):
-                    start = batch * self.batch_size
-                    end = start + self.batch_size
-                    X_batch = X_train[start:end]
-                    y_batch = y_train[start:end]
-                    y_pred, cache = self.forward(X_batch, training=True)
-                    batch_loss = self.compute_loss(y_pred, y_batch)
-                    epoch_loss += batch_loss
-                    metrics = self.compute_metrics(y_pred, y_batch)
-                    epoch_accuracy += metrics['accuracy']
-                    self.backward(cache, y_batch)
-                epoch_loss /= num_batches
-                epoch_accuracy /= num_batches
-            else:
-                # Full-batch training
-                y_pred, cache = self.forward(X_train, training=True)
-                epoch_loss = self.compute_loss(y_pred, y_train)
-                metrics = self.compute_metrics(y_pred, y_train)
-                epoch_accuracy = metrics['accuracy']
-                self.backward(cache, y_train)
-
+            indices = np.random.permutation(n_samples)
+            X_train_shuffled = X_train[indices]
+            y_train_shuffled = y_train[indices]
+            epoch_loss = 0.0
+            epoch_accuracy = 0.0
+            num_batches = int(np.ceil(n_samples / self.batch_size))
+            for batch in range(num_batches):
+                start = batch * self.batch_size
+                end = min(start + self.batch_size, n_samples)
+                X_batch = X_train_shuffled[start:end]
+                y_batch = y_train_shuffled[start:end]
+                y_pred, cache = self.forward(X_batch, training=True)
+                batch_loss = self.compute_loss(y_pred, y_batch)
+                epoch_loss += batch_loss * (end - start) / n_samples
+                metrics = self.compute_metrics(y_pred, y_batch)
+                epoch_accuracy += metrics['accuracy'] * (end - start) / n_samples
+                self.backward(cache, y_batch)
             self.train_losses.append(epoch_loss)
             self.train_accuracies.append(epoch_accuracy)
 
             if X_val is not None:
                 y_val_pred, _ = self.forward(X_val, training=False)
                 val_loss = self.compute_loss(y_val_pred, y_val)
-                val_metrics = self.compute_metrics(y_val_pred, y_val)
-                val_accuracy = val_metrics['accuracy']
+                val_acc = self.compute_metrics(y_val_pred, y_val)['accuracy']
                 self.val_losses.append(val_loss)
-                self.val_accuracies.append(val_accuracy)
+                self.val_accuracies.append(val_acc)
 
                 # Early stopping check
                 if val_loss < self.best_loss:
@@ -337,82 +314,34 @@ class MatrixMLP:
                     self.no_improvement_count += 1
                     if self.early_stopping and self.no_improvement_count >= self.patience:
                         if verbose:
-                            print(f"Early stopping triggered at epoch {epoch+1}.")
+                            print(f"Early stopping at epoch {epoch+1}.")
                         self.weights = [w.copy() for w in self.best_weights]
                         self.biases = [b.copy() for b in self.best_biases]
                         break
 
                 if verbose:
-                    print(f"Epoch {epoch+1}/{epochs} - Train Loss: {epoch_loss:.4f}, Train Acc: {epoch_accuracy:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.4f}")
-            else:
-                if verbose:
-                    print(f"Epoch {epoch+1}/{epochs} - Train Loss: {epoch_loss:.4f}, Train Acc: {epoch_accuracy:.4f}")
-
-            if csv_log_path is not None:
-                self._append_csv_log(csv_log_path, epoch+1, epoch_loss, epoch_accuracy,
-                                     val_loss if X_val is not None else None,
-                                     val_accuracy if X_val is not None else None)
+                    print(f"Epoch {epoch+1}/{epochs} - Train Loss: {epoch_loss:.4f}, Train Acc: {epoch_accuracy:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+                if csv_log_path is not None:
+                    self._append_csv_log(csv_log_path, epoch+1, epoch_loss, epoch_accuracy, val_loss, val_acc)
 
     def predict(self, X):
         """
         Predict the output for given input X.
         """
-        predictions, _ = self.forward(X, training=False)
-        return predictions
+        preds, _ = self.forward(X, training=False)
+        return preds
 
     def _initialize_csv(self, csv_path):
         """Initialize the CSV log file if it does not exist."""
         if not os.path.exists(csv_path):
-            with open(csv_path, mode='w', newline='') as f:
+            with open(csv_path, 'w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(["Epoch", "Train Loss", "Train Accuracy", "Validation Loss", "Validation Accuracy"])
 
     def _append_csv_log(self, csv_path, epoch, train_loss, train_acc, val_loss, val_acc):
         """Append epoch results to the CSV log file."""
-        with open(csv_path, mode='a', newline='') as f:
+        with open(csv_path, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([epoch, f"{train_loss:.6f}", f"{train_acc:.4f}",
                              f"{val_loss:.6f}" if val_loss is not None else "",
                              f"{val_acc:.4f}" if val_acc is not None else ""])
-
-def plot_learning_curve(train_losses, val_losses, train_accuracies, val_accuracies,
-                        title_loss='Loss Curve', title_acc='Accuracy Curve'):
-    """
-    Plot the training and validation loss and accuracy curves.
-    An optional moving average smoothing is applied to reduce choppiness.
-    """
-    # Optional smoothing function using moving average
-    def smooth(data, window=5):
-        if len(data) < window:
-            return data
-        return np.convolve(data, np.ones(window)/window, mode='valid')
-
-    # Adjust smoothing_window as needed (set to 5 here)
-    smoothing_window = 5
-    smooth_train_loss = smooth(train_losses, window=smoothing_window)
-    smooth_val_loss = smooth(val_losses, window=smoothing_window) if val_losses else None
-    smooth_train_acc = smooth(train_accuracies, window=smoothing_window)
-    smooth_val_acc = smooth(val_accuracies, window=smoothing_window) if val_accuracies else None
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-
-    # Plot loss curves
-    ax1.plot(smooth_train_loss, label='Training Loss', color='blue', linewidth=2)
-    if smooth_val_loss is not None:
-        ax1.plot(smooth_val_loss, label='Validation Loss', color='orange', linewidth=2)
-    ax1.set_xlabel('Epochs', fontsize=12)
-    ax1.set_ylabel('Loss', fontsize=12)
-    ax1.set_title(title_loss, fontsize=14)
-    ax1.legend(fontsize=10)
-
-    # Plot accuracy curves
-    ax2.plot(smooth_train_acc, label='Training Accuracy', color='blue', linewidth=2)
-    if smooth_val_acc is not None:
-        ax2.plot(smooth_val_acc, label='Validation Accuracy', color='orange', linewidth=2)
-    ax2.set_xlabel('Epochs', fontsize=12)
-    ax2.set_ylabel('Accuracy', fontsize=12)
-    ax2.set_title(title_acc, fontsize=14)
-    ax2.legend(fontsize=10)
-
-    plt.tight_layout()
-    plt.show()
