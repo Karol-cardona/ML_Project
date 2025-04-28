@@ -1,6 +1,7 @@
 import os
 import ast
 import numpy as np
+import random
 
 from monk_loader import load_monk_data, one_hot_encode
 from MLP import MatrixMLP
@@ -8,10 +9,6 @@ from plotting import plot_learning_curve
 from evaluation import evaluate_model
 from csv_utils import load_global_best
 from search_utils import random_search, create_focused_param_grid, grid_search
-
-# Define the folder where output files will be saved
-output_dir = "results"
-os.makedirs(output_dir, exist_ok=True)
 
 # Define the hyperparameter space for the initial random search
 initial_param_space = {
@@ -21,18 +18,14 @@ initial_param_space = {
     'l1_lambda': list(np.arange(0.0, 0.01, 0.002)),
     'dropout_rate': list(np.arange(0.0, 0.3, 0.05)),
     'momentum': list(np.arange(0.5, 0.95, 0.1)),
-    'activation': ['sigmoid', 'tanh', 'relu', 'leaky_relu'],
+    'activation': ['sigmoid', 'tanh'],
     'optimizer': ['sgd', 'adam'],
     'lr_decay': list(np.arange(0.0, 0.05, 0.01)),
     'batch_size': [8, 16, 32, 64],
-    'weight_init': ['xavier', 'he', 'glorot', 'range'],
+    'weight_init': ['gaussian', 'xavier', 'he', 'glorot', 'range'],
     'init_range': [(-0.1, 0.1), (-0.5, 0.5), (-0.7, 0.7)],
     'patience': [10, 20, 30]
 }
-
-# Filename for storing global best hyperparameters from grid search
-GLOBAL_BEST_FILE = os.path.join("results", "grid_search_best_params.txt")
-
 
 def train_and_evaluate_model(X_train, y_train, X_val, y_val, params, epochs=50):
     """
@@ -68,10 +61,6 @@ def train_and_evaluate_model(X_train, y_train, X_val, y_val, params, epochs=50):
     val_acc = model.compute_metrics(y_val_pred, y_val)['accuracy']
     return val_loss, val_acc, model
 
-
-import numpy as np
-import random
-
 def kfold_split(X, y, k=5, shuffle=True, random_state=None):
     """
     Generate indices for k-fold cross-validation.
@@ -103,9 +92,18 @@ def kfold_split(X, y, k=5, shuffle=True, random_state=None):
     return folds
 
 if __name__ == "__main__":
-    # 1) Load MONK training and test data with one-hot encoding
-    train_file = './Monk/monks-3.train'
-    test_file  = './Monk/monks-3.test'
+    monk = 3
+
+    # 1) Directory of the folder monk
+    base_dir = os.path.join("results", f"monk{monk}")
+    os.makedirs(base_dir, exist_ok=True)
+
+    # File global best hyperparams for MONK
+    GLOBAL_BEST_FILE = os.path.join(base_dir, "grid_search_best_params.txt")
+
+    # 2) Load MONK training and test data with one-hot encoding
+    train_file = f'./Monk/monks-{monk}.train'
+    test_file  = f'./Monk/monks-{monk}.test'
     X_train_full, y_train_full = load_monk_data(train_file, one_hot=True)
     X_test, y_test = load_monk_data(test_file, one_hot=True)
 
@@ -115,10 +113,10 @@ if __name__ == "__main__":
     if y_test.ndim == 1:
         y_test = one_hot_encode(y_test)
 
-    print(f"Train full: {X_train_full.shape}, {y_train_full.shape}")
-    print(f"Test:       {X_test.shape},       {y_test.shape}")
+    print(f"Train full:{X_train_full.shape}, {y_train_full.shape}")
+    print(f"Test:{X_test.shape}, {y_test.shape}")
 
-    # 2) Prepare k-fold cross-validation splits
+    # 3) Prepare k-fold cross-validation splits
     k = 5
     folds = kfold_split(X_train_full, y_train_full, k=k, shuffle=True, random_state=42)
 
@@ -130,7 +128,7 @@ if __name__ == "__main__":
 
         print(f"Train: {X_train.shape}, Validation: {X_val.shape}")
 
-        # 3) Load global best hyperparameters if available; otherwise run searches
+        # 4) Load global best hyperparameters if available; otherwise run searches
         if os.path.exists(GLOBAL_BEST_FILE):
             print("Global best file found. Carico la configurazione globale...")
             raw = load_global_best(GLOBAL_BEST_FILE)
@@ -159,7 +157,8 @@ if __name__ == "__main__":
                 initial_param_space,
                 n_trials=100,
                 epochs=40,
-                train_eval_fn=train_and_evaluate_model
+                train_eval_fn=train_and_evaluate_model,
+                result_dir=base_dir
             )
             top_results = random_results[:5]
             print("\nTop 5 from random search:")
@@ -172,10 +171,6 @@ if __name__ == "__main__":
                 n_top=5,
                 max_combinations=50
             )
-            focused_param_grid['n_hidden'] = [[3],[4],[5]]
-            focused_param_grid['activation'] = ['tanh']
-            focused_param_grid['dropout_rate'] = [0.0]
-            focused_param_grid['batch_size'] = [len(X_train)]
 
             # 4c) Conduct grid search on the narrowed parameter grid
             print("\nStarting grid search with focused grid...")
@@ -183,10 +178,12 @@ if __name__ == "__main__":
                 X_train, y_train, X_val, y_val,
                 focused_param_grid,
                 epochs=50,
-                train_eval_fn=train_and_evaluate_model
+                train_eval_fn=train_and_evaluate_model,
+                result_dir=base_dir,
             )
 
         # 5) Final training pass on the current fold with the best parameters
+        final_csv = os.path.join(base_dir, f"monk{monk}_fold{fold+1}_training_log.csv")
         print("\nTraining finale con i migliori iperparametri:")
         final_model = MatrixMLP(
             n_inputs = X_train.shape[1],
@@ -213,7 +210,7 @@ if __name__ == "__main__":
             epochs=150,
             validation_data=(X_val, y_val),
             verbose=True,
-            csv_log_path=os.path.join(output_dir, f"monk_fold{fold+1}_training_log.csv")
+            csv_log_path=final_csv
         )
 
         # Evaluate and record performance on the validation split
@@ -224,11 +221,12 @@ if __name__ == "__main__":
     # 6) Compute and display average cross-validation performance
     avg_loss = np.mean([res[0] for res in fold_results])
     avg_acc = np.mean([res[1] for res in fold_results])
-    print(f"\n=== Risultati Finali K-Fold ===")
+    print(f"\n=== Risultati Finali K-Fold MONK-{monk} ===")
     print(f"Validation Loss Medio: {avg_loss:.4f}")
     print(f"Validation Accuracy Medio: {avg_acc:.4f}")
 
     # 7) Final training on the entire training set and fine-tuning on test set
+    final_full_csv = os.path.join(base_dir, "monk_final_training_log.csv")
     print("\nAddestramento finale su tutto il training set...")
     final_model = MatrixMLP(
         n_inputs = X_train_full.shape[1],
@@ -256,10 +254,10 @@ if __name__ == "__main__":
         epochs=150,
         validation_data=(X_test, y_test),
         verbose=True,
-        csv_log_path=os.path.join(output_dir, "monk_final_training_log.csv")
+        csv_log_path=final_full_csv
     )
 
-    # # Reduce learning rate and fine-tune
+    # Reduce learning rate and fine-tune (fine-tuning learning-rate annealing)
     print("\nFine-tuning con learning rate ridotto...")
     final_model.learning_rate = best_params['learning_rate'] * 0.1
     final_model.train(
@@ -267,7 +265,7 @@ if __name__ == "__main__":
         epochs=50,
         validation_data=(X_test, y_test),
         verbose=True,
-        csv_log_path=os.path.join(output_dir, "monk_fine_tuning_log.csv")
+        csv_log_path=final_full_csv
     )
 
     # Evaluate on test set and plot learning curves
@@ -277,5 +275,7 @@ if __name__ == "__main__":
                         final_model.val_losses,
                         final_model.train_accuracies,
                         final_model.val_accuracies,
-                        title_loss='MONK-3 Loss Curve',
-                        title_acc='MONK-3 Accuracy Curve')
+                        title_loss=f'MONK-{monk} Loss Curve',
+                        title_acc=f'MONK-{monk} Accuracy Curve',
+                        smoothing='exp',
+                        alpha=0.2)

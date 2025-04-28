@@ -76,9 +76,12 @@ class MatrixMLP:
     def _init_weight_matrix(self, n_in, n_out):
         """
         Initialize weights based on the chosen method.
-        Supported methods: 'xavier', 'he', 'glorot', 'orthogonal', 'range'.
+        Supported methods: 'gaussian' 'xavier', 'he', 'glorot', 'orthogonal', 'range'.
         """
-        if self.weight_init == 'xavier':
+        if self.weight_init == 'gaussian':
+            mu, sigma = self.init_range
+            return np.random.randn(n_in, n_out) * sigma + mu
+        elif self.weight_init == 'xavier':
             return np.random.randn(n_in, n_out) * np.sqrt(1. / n_in)
         elif self.weight_init == 'he':
             return np.random.randn(n_in, n_out) * np.sqrt(2. / n_in)

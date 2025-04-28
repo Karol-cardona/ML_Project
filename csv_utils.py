@@ -2,13 +2,9 @@ import ast
 import os
 import csv
 
-def ensure_dir(path):
-    """Create directory if it doesn't exist"""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-
 def save_global_best(global_best_file, params, val_loss, val_acc):
     """Save the best hyperparameters to a file"""
-    ensure_dir(global_best_file)
+    os.makedirs(os.path.dirname(global_best_file), exist_ok=True)
     with open(global_best_file, 'w') as f:
         f.write("Best Hyperparameters:\n")
         for k, v in params.items():

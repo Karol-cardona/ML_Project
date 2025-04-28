@@ -11,12 +11,12 @@ from csv_utils import (
     update_global_best
 )
 
-def random_search(X_train, y_train, X_val, y_val, param_space, n_trials=50, epochs=30, train_eval_fn=None):
+def random_search(X_train, y_train, X_val, y_val, param_space, n_trials=50, epochs=30, train_eval_fn=None, result_dir="result"):
     """
     Perform a randomized hyperparameter search.
     """
     # Path to CSV log for random search results
-    csv_path = os.path.join("results", "monk_random_search.csv")
+    csv_path = os.path.join(result_dir, "monk_random_search.csv")
     ensure_csv_exists(csv_path, is_random_search=True)
 
     # Load any cached results to skip duplicate evaluations
@@ -109,12 +109,12 @@ def k_fold_score(params, X, y, k=5, epochs=30, train_eval_fn=None):
 
     return np.mean(losses), np.mean(accs)
 
-def grid_search(X_train, y_train, X_val, y_val, param_grid, epochs=50, train_eval_fn=None):
+def grid_search(X_train, y_train, X_val, y_val, param_grid, epochs=50, train_eval_fn=None, result_dir="result"):
     """
     Exhaustive grid search over a parameter grid, with caching and global best update.
     """
 
-    csv_path = os.path.join("results", "monk_grid_search.csv")
+    csv_path = os.path.join(result_dir, "monk_grid_search.csv")
     ensure_csv_exists(csv_path)
     cache = read_csv_cache(csv_path)
 
@@ -137,12 +137,12 @@ def grid_search(X_train, y_train, X_val, y_val, param_grid, epochs=50, train_eva
             best_loss, best_acc, best_params = cache[key][0], cache[key][1], params
 
     # Save or update the global best parameters file
-    global_best_file = os.path.join("results", "grid_search_best_params.txt")
+    global_best_file = os.path.join(result_dir, "grid_search_best_params.txt")
     best_params, best_loss, best_acc = update_global_best(global_best_file, best_params, best_loss, best_acc)
     print(f"Best → loss={best_loss:.4f}, acc={best_acc:.4f}")
     return best_params, best_loss, best_acc
 
-def grid_search_cv(X_train, y_train, param_grid, k=5, epochs=50, train_eval_fn=None):
+def grid_search_cv(X_train, y_train, param_grid, k=5, epochs=50, train_eval_fn=None, result_dir="result"):
     """
     Perform grid search with k-fold cross-validation for each parameter combination.
     """
@@ -152,7 +152,7 @@ def grid_search_cv(X_train, y_train, param_grid, k=5, epochs=50, train_eval_fn=N
     print(f"Grid search CV: {len(combos)} combinazioni")
 
     # CSV caching similar to plain grid_search
-    csv_path = os.path.join("results", "monk_grid_search_cv.csv")
+    csv_path = os.path.join(result_dir, "monk_grid_search_cv.csv")
     ensure_csv_exists(csv_path)
     cache = read_csv_cache(csv_path)
 
@@ -177,7 +177,7 @@ def grid_search_cv(X_train, y_train, param_grid, k=5, epochs=50, train_eval_fn=N
             print(f"New best: loss={best_loss:.4f}, acc={best_acc:.4f}")
 
     # Persist final global best grid-search-cv parameters
-    global_best_file = os.path.join("results", "grid_search_cv_best_params.txt")
+    global_best_file = os.path.join(result_dir, "grid_search_cv_best_params.txt")
     best_params, best_loss, best_acc = update_global_best(global_best_file, best_params, best_loss, best_acc)
     print(f"Best overall: loss={best_loss:.4f}, acc={best_acc:.4f}")
     return best_params, best_loss, best_acc

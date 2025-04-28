@@ -1,0 +1,2 @@
+n_hidden,learning_rate,reg_lambda,l1_lambda,dropout_rate,momentum,activation,optimizer,lr_decay,batch_size,weight_init,init_range,patience,val_loss,val_accuracy
+[3],0.10999999999999997,0.0,0.0,0.2,0.7999999999999999,tanh,sgd,0.04,8,he,"(-0.1, 0.1)",30,0.029991143893083553,0.92

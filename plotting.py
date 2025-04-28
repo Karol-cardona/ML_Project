@@ -1,23 +1,52 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.signal import savgol_filter  # pip install scipy
 
 def plot_learning_curve(train_losses, val_losses, train_accuracies, val_accuracies,
-                        title_loss='Loss Curve', title_acc='Accuracy Curve'):
+                        title_loss='Loss Curve', title_acc='Accuracy Curve',
+                        smoothing='moving',  # 'moving', 'exp', or 'savgol'
+                        window=11,           # per moving e savgol: odd integer
+                        alpha=0.1,           # per exp smoothing
+                        polyorder=3):        # per savgol
     """
     Plot smoothed learning curves for loss and accuracy.
     A moving average filter is applied to reduce the fluctuation in the curves.
     """
-    def smooth(data, window=5):
-        if len(data) < window:
-            return data
-        return np.convolve(data, np.ones(window)/window, mode='valid')
 
-    smoothing_window = 5
-    smooth_train_loss = smooth(train_losses, window=smoothing_window)
-    smooth_val_loss = smooth(val_losses, window=smoothing_window) if val_losses else None
-    smooth_train_acc = smooth(train_accuracies, window=smoothing_window)
-    smooth_val_acc = smooth(val_accuracies, window=smoothing_window) if val_accuracies else None
+    def smooth_moving(data, w):
+        # moving average with padding to preserve length
+        kernel = np.ones(w) / w
+        return np.convolve(data, kernel, mode='same')
 
+    def smooth_exp(data, a):
+        # exponential weighted moving average
+        s = np.zeros_like(data, dtype=float)
+        s[0] = data[0]
+        for i in range(1, len(data)):
+            s[i] = a * data[i] + (1 - a) * s[i-1]
+        return s
+
+    def apply_smoothing(data):
+        # apply the chosen smoothing method
+        if smoothing == 'moving':
+            return smooth_moving(data, window)
+        elif smoothing == 'exp':
+            return smooth_exp(data, alpha)
+        elif smoothing == 'savgol':
+            # ensure window is odd and greater than polyorder
+            w = window if window % 2 == 1 else window+1
+            return savgol_filter(data, window_length=w, polyorder=polyorder, mode='interp')
+        else:
+            # no smoothing
+            return np.array(data)
+
+    # generate smoothed series
+    smooth_train_loss = apply_smoothing(train_losses)
+    smooth_val_loss = apply_smoothing(val_losses) if val_losses else None
+    smooth_train_acc = apply_smoothing(train_accuracies)
+    smooth_val_acc = apply_smoothing(val_accuracies) if val_accuracies else None
+
+    # create subplots for loss and accuracy
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
     # Plot loss curves.
