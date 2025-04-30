@@ -68,14 +68,18 @@ def create_focused_param_grid(top_results, n_top=5, max_combinations=20):
         print(f"Too many combinations ({total}) → reducing")
 
         # For each parameter, keep only the single best value based on average loss
-        for k in grid:
-            if len(grid[k]) <= 1:
+        for k, vals in grid.items():
+            if len(vals) <= 1:
                 continue
 
+            # Compute mean loss safely, ignore values without occurrences
+            def mean_loss(v):
+                losses = [r[1] for r in top_results
+                          if (tuple(r[0][k]) if k == 'n_hidden' else r[0][k]) == v]
+                return np.mean(losses) if len(losses) > 0 else np.inf
+
             # Find the value with lowest mean loss among top_results
-            best = min(grid[k], key=lambda v: np.mean([
-                r[1] for r in top_results if (tuple(r[0][k]) if k=='n_hidden' else r[0][k])==v
-            ]))
+            best = min(vals, key=mean_loss)
             grid[k] = [best]
     return grid
 

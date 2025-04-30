@@ -1,5 +1,4 @@
 import os
-import ast
 import numpy as np
 import random
 
@@ -7,7 +6,6 @@ from monk_loader import load_monk_data, one_hot_encode
 from MLP import MatrixMLP
 from plotting import plot_learning_curve
 from evaluation import evaluate_model
-from csv_utils import load_global_best
 from search_utils import random_search, create_focused_param_grid, grid_search
 
 # Define the hyperparameter space for the initial random search
@@ -17,14 +15,14 @@ initial_param_space = {
     'reg_lambda': list(np.arange(0.0, 0.02, 0.002)),
     'l1_lambda': list(np.arange(0.0, 0.01, 0.002)),
     'dropout_rate': list(np.arange(0.0, 0.3, 0.05)),
-    'momentum': list(np.arange(0.5, 0.95, 0.1)),
+    'momentum': list(np.arange(0.0, 0.90, 0.1)),
     'activation': ['sigmoid', 'tanh'],
     'optimizer': ['sgd', 'adam'],
     'lr_decay': list(np.arange(0.0, 0.05, 0.01)),
     'batch_size': [8, 16, 32, 64],
     'weight_init': ['gaussian', 'xavier', 'he', 'glorot', 'range'],
     'init_range': [(-0.1, 0.1), (-0.5, 0.5), (-0.7, 0.7)],
-    'patience': [10, 20, 30]
+    'patience': [20, 30, 35]
 }
 
 def train_and_evaluate_model(X_train, y_train, X_val, y_val, params, epochs=50):
@@ -53,7 +51,12 @@ def train_and_evaluate_model(X_train, y_train, X_val, y_val, params, epochs=50):
     )
 
     # Train the model quietly
-    model.train(X_train, y_train, epochs=epochs, validation_data=(X_val, y_val), verbose=False)
+    model.train(
+        X_train, y_train,
+        epochs=epochs,
+        validation_data=(X_val, y_val),
+        verbose=False
+    )
 
     # Compute loss and accuracy on the validation set
     y_val_pred = model.predict(X_val)
@@ -99,7 +102,7 @@ if __name__ == "__main__":
     os.makedirs(base_dir, exist_ok=True)
 
     # File global best hyperparams for MONK
-    GLOBAL_BEST_FILE = os.path.join(base_dir, "grid_search_best_params.txt")
+    BEST_HYPERPARAMS_FILE = os.path.join(base_dir, "grid_search_best_params.txt")
 
     # 2) Load MONK training and test data with one-hot encoding
     train_file = f'./Monk/monks-{monk}.train'
@@ -117,70 +120,48 @@ if __name__ == "__main__":
     print(f"Test:{X_test.shape}, {y_test.shape}")
 
     # 3) Prepare k-fold cross-validation splits
-    k = 5
-    folds = kfold_split(X_train_full, y_train_full, k=k, shuffle=True, random_state=42)
+    key = 5
+    folds = kfold_split(X_train_full, y_train_full, k=key, shuffle=True, random_state=42)
 
     fold_results = []
     for fold, (train_idx, val_idx) in enumerate(folds):
-        print(f"\n=== Fold {fold + 1}/{k} ===")
+        print(f"\n=== Fold {fold + 1}/{key} ===")
         X_train, y_train = X_train_full[train_idx], y_train_full[train_idx]
         X_val, y_val = X_train_full[val_idx], y_train_full[val_idx]
 
         print(f"Train: {X_train.shape}, Validation: {X_val.shape}")
 
-        # 4) Load global best hyperparameters if available; otherwise run searches
-        if os.path.exists(GLOBAL_BEST_FILE):
-            print("Global best file found. Carico la configurazione globale...")
-            raw = load_global_best(GLOBAL_BEST_FILE)
-            best_params = {}
+        # 4a) Perform random search to identify promising configurations
+        print("Starting random search...")
+        random_results = random_search(
+            X_train, y_train, X_val, y_val,
+            initial_param_space,
+            n_trials=100,
+            epochs=40,
+            train_eval_fn=train_and_evaluate_model,
+            result_dir=base_dir
+        )
+        top_results = random_results[:5]
+        print("\nTop 5 from random search:")
+        for i,(p,l,a) in enumerate(top_results,1):
+            print(f" {i}) loss={l:.4f}, acc={a:.4f} -> {p}")
 
-            # Parse keys/values from file
-            for k,v in raw.items():
-                if k in ('val_loss','val_accuracy', 'Validation Loss', 'Validation Accuracy'):
-                    continue
-                try:
-                    best_params[k] = ast.literal_eval(v)
-                except:
-                    best_params[k] = v
-            best_val_loss = float(raw.get('val_loss', raw.get('Validation Loss', float('inf'))))
-            best_val_acc = float(raw.get('val_accuracy', raw.get('Validation Accuracy', 0.0)))
-            print("Configurazione globale caricata:")
-            for k,v in best_params.items():
-                print(f"  {k}: {v}")
-            print(f"Val Loss: {best_val_loss:.4f}, Val Acc: {best_val_acc:.4f}")
+        # 4b) Build a focused grid around the top-5 results
+        focused_param_grid = create_focused_param_grid(
+            top_results,
+            n_top=5,
+            max_combinations=50
+        )
 
-        else:
-            # 4a) Perform random search to identify promising configurations
-            print("Starting random search...")
-            random_results = random_search(
-                X_train, y_train, X_val, y_val,
-                initial_param_space,
-                n_trials=100,
-                epochs=40,
-                train_eval_fn=train_and_evaluate_model,
-                result_dir=base_dir
-            )
-            top_results = random_results[:5]
-            print("\nTop 5 from random search:")
-            for i,(p,l,a) in enumerate(top_results,1):
-                print(f" {i}) loss={l:.4f}, acc={a:.4f} -> {p}")
-
-            # 4b) Build a focused grid around the top-5 results
-            focused_param_grid = create_focused_param_grid(
-                top_results,
-                n_top=5,
-                max_combinations=50
-            )
-
-            # 4c) Conduct grid search on the narrowed parameter grid
-            print("\nStarting grid search with focused grid...")
-            best_params, best_val_loss, best_val_acc = grid_search(
-                X_train, y_train, X_val, y_val,
-                focused_param_grid,
-                epochs=50,
-                train_eval_fn=train_and_evaluate_model,
-                result_dir=base_dir,
-            )
+        # 4c) Conduct grid search on the narrowed parameter grid
+        print("\nStarting grid search with focused grid...")
+        best_params, best_val_loss, best_val_acc = grid_search(
+            X_train, y_train, X_val, y_val,
+            focused_param_grid,
+            epochs=50,
+            train_eval_fn=train_and_evaluate_model,
+            result_dir=base_dir,
+        )
 
         # 5) Final training pass on the current fold with the best parameters
         final_csv = os.path.join(base_dir, f"monk{monk}_fold{fold+1}_training_log.csv")
@@ -257,17 +238,6 @@ if __name__ == "__main__":
         csv_log_path=final_full_csv
     )
 
-    # Reduce learning rate and fine-tune (fine-tuning learning-rate annealing)
-    print("\nFine-tuning con learning rate ridotto...")
-    final_model.learning_rate = best_params['learning_rate'] * 0.1
-    final_model.train(
-        X_train_full, y_train_full,
-        epochs=50,
-        validation_data=(X_test, y_test),
-        verbose=True,
-        csv_log_path=final_full_csv
-    )
-
     # Evaluate on test set and plot learning curves
     print("\nValutazione sul test set:")
     evaluate_model(final_model, X_test, y_test)
@@ -276,6 +246,4 @@ if __name__ == "__main__":
                         final_model.train_accuracies,
                         final_model.val_accuracies,
                         title_loss=f'MONK-{monk} Loss Curve',
-                        title_acc=f'MONK-{monk} Accuracy Curve',
-                        smoothing='exp',
-                        alpha=0.2)
+                        title_acc=f'MONK-{monk} Accuracy Curve')

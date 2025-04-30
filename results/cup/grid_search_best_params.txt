@@ -1,0 +1,16 @@
+Best Hyperparameters:
+n_hidden: [6]
+learning_rate: 0.025
+reg_lambda: 0.0
+l1_lambda: 0.024
+dropout_rate: 0.0
+momentum: 0.5
+activation: relu
+optimizer: adam
+lr_decay: 0.0
+batch_size: 32
+weight_init: xavier
+init_range: (-0.1, 0.1)
+patience: 20
+Validation Loss: 0.18266425776115677
+Validation Accuracy: 0.3498023212701121

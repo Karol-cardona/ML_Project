@@ -230,6 +230,14 @@ class MatrixMLP:
             if i > 0:
                 d_act = self._activation_derivative(pre_activations[i-1])
                 delta = np.dot(delta, self.weights[i].T) * d_act
+        # GRADIENT CLIPPING (norm-based)
+        max_norm = 5.0
+        # calcola norma complessiva
+        total_norm = np.sqrt(sum(np.sum(g**2) for g in grad_weights))
+        if total_norm > max_norm:
+            scale = max_norm / (total_norm + 1e-6)
+            grad_weights = [g * scale for g in grad_weights]
+
         self._update_params(grad_weights, grad_biases)
 
     # Update weights and biases
@@ -255,6 +263,9 @@ class MatrixMLP:
                 v_hat = self.adam_v[i] / (1 - beta2**self.adam_t)
                 self.weights[i] -= self.learning_rate * m_hat / (np.sqrt(v_hat) + 1e-8)
             self.biases[i] -= self.learning_rate * grad_biases[i]
+
+            clip_val = 5.0
+            self.weights[i] = np.clip(self.weights[i], -clip_val, clip_val)
 
     def train(self, X_train, y_train, epochs=100, verbose=True,
               validation_data=None, csv_log_path=None):
