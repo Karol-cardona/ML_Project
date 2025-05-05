@@ -15,7 +15,7 @@ initial_param_space = {
     'reg_lambda': list(np.arange(0.0, 0.01, 0.001)),
     'l1_lambda': list(np.arange(0.0, 0.05, 0.001)),
     'dropout_rate': list(np.arange(0.0, 0.2, 0.02)),
-    'momentum': [0.0, 0.5, 0.9],
+    'momentum': [0.7, 0.8, 0.9],
     'activation': ['sigmoid', 'tanh', 'relu', 'leaky_relu', 'elu'],
     'optimizer': ['sgd', 'adam'],
     'lr_decay': [0.0, 0.1, 0.2],
@@ -60,10 +60,9 @@ def train_and_evaluate_model(X_train, y_train, X_val, y_val, params, epochs=50):
     # Evaluate on validation set
     y_val_pred = model.predict(X_val)
     val_loss = model.compute_loss(y_val_pred, y_val)
-    val_mse = np.mean((y_val_pred - y_val)**2)
     val_mee  = mean_euclidean_error(y_val_pred, y_val)
 
-    return val_loss, val_mse, val_mee, model
+    return val_loss, val_mee, model
 
 
 def kfold_split(X, y, k=5, shuffle=True, random_state=None):
