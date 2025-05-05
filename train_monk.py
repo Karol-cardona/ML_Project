@@ -10,19 +10,18 @@ from search_utils import random_search, create_focused_param_grid, grid_search
 
 # Define the hyperparameter space for the initial random search
 initial_param_space = {
-    'n_hidden': [[3], [4], [5], [6]],
-    'learning_rate': list(np.arange(0.01, 0.2, 0.02)),
-    'reg_lambda': list(np.arange(0.0, 0.02, 0.002)),
-    'l1_lambda': list(np.arange(0.0, 0.01, 0.002)),
+    'n_hidden': [[3],[4]],
+    'learning_rate': list(np.arange(0.01, 0.2, 0.15)),
     'dropout_rate': list(np.arange(0.0, 0.3, 0.05)),
-    'momentum': list(np.arange(0.0, 0.90, 0.1)),
-    'activation': ['sigmoid', 'tanh'],
-    'optimizer': ['sgd', 'adam'],
-    'lr_decay': list(np.arange(0.0, 0.05, 0.01)),
-    'batch_size': [8, 16, 32, 64],
-    'weight_init': ['gaussian', 'xavier', 'he', 'glorot', 'range'],
-    'init_range': [(-0.1, 0.1), (-0.5, 0.5), (-0.7, 0.7)],
-    'patience': [20, 30, 35]
+    'momentum': list(np.arange(0.7, 0.9, 0.05)),
+    'activation': ['sigmoid'],
+    'optimizer': ['sgd'],
+    'reg_lambda': [0.0],
+    'l1_lambda': [0.0],
+    'lr_decay': [0.0],
+    'batch_size': [2, 4, 8],
+    'weight_init': ['gaussian', 'he', 'glorot'],
+    'init_range': [(-0.1, 0.1), (-0.5, 0.5)],
 }
 
 def train_and_evaluate_model(X_train, y_train, X_val, y_val, params, epochs=50):
@@ -37,8 +36,8 @@ def train_and_evaluate_model(X_train, y_train, X_val, y_val, params, epochs=50):
         activation=params['activation'],
         output_activation='sigmoid',
         learning_rate=params['learning_rate'],
-        reg_lambda=params['reg_lambda'],
-        l1_lambda=params.get('l1_lambda',0.0),
+        reg_lambda=0.0,
+        l1_lambda=0.0,
         dropout_rate=params['dropout_rate'],
         momentum=params.get('momentum',0.9),
         optimizer=params['optimizer'],
@@ -47,7 +46,7 @@ def train_and_evaluate_model(X_train, y_train, X_val, y_val, params, epochs=50):
         weight_init=params.get('weight_init','range'),
         init_range=params.get('init_range',(-0.7,0.7)),
         early_stopping=True,
-        patience=params.get('patience',15)
+        patience=params.get('patience',30)
     )
 
     # Train the model quietly
@@ -95,7 +94,7 @@ def kfold_split(X, y, k=5, shuffle=True, random_state=None):
     return folds
 
 if __name__ == "__main__":
-    monk = 3
+    monk = 2
 
     # 1) Directory of the folder monk
     base_dir = os.path.join("results", f"monk{monk}")
@@ -137,7 +136,7 @@ if __name__ == "__main__":
             X_train, y_train, X_val, y_val,
             initial_param_space,
             n_trials=100,
-            epochs=40,
+            epochs=50,
             train_eval_fn=train_and_evaluate_model,
             result_dir=base_dir
         )
@@ -149,8 +148,8 @@ if __name__ == "__main__":
         # 4b) Build a focused grid around the top-5 results
         focused_param_grid = create_focused_param_grid(
             top_results,
-            n_top=5,
-            max_combinations=50
+            n_top=20,
+            max_combinations=100
         )
 
         # 4c) Conduct grid search on the narrowed parameter grid
@@ -173,22 +172,22 @@ if __name__ == "__main__":
             activation = best_params['activation'],
             output_activation = 'sigmoid',
             learning_rate = best_params['learning_rate'],
-            reg_lambda = best_params['reg_lambda'],
-            l1_lambda = best_params['l1_lambda'],
+            reg_lambda = 0.0,
+            l1_lambda = 0.0,
             dropout_rate = best_params['dropout_rate'],
             momentum = best_params['momentum'],
             optimizer = best_params['optimizer'],
             lr_decay = best_params['lr_decay'],
             batch_size = best_params.get('batch_size',32),
             weight_init = best_params.get('weight_init','range'),
-            init_range = best_params.get('init_range',(-0.7,0.7)),
+            init_range = best_params.get('init_range',(-0.5,0.5)),
             early_stopping = True,
-            patience = best_params.get('patience',15),
+            patience = best_params.get('patience', 30)
         )
 
         final_model.train(
             X_train, y_train,
-            epochs=150,
+            epochs=200,
             validation_data=(X_val, y_val),
             verbose=True,
             csv_log_path=final_csv
@@ -216,8 +215,8 @@ if __name__ == "__main__":
         activation = best_params['activation'],
         output_activation = 'sigmoid',
         learning_rate = best_params['learning_rate'],
-        reg_lambda = best_params['reg_lambda'],
-        l1_lambda = best_params['l1_lambda'],
+        reg_lambda = 0.0,
+        l1_lambda = 0.0,
         dropout_rate = best_params['dropout_rate'],
         momentum = best_params['momentum'],
         optimizer = best_params['optimizer'],
@@ -226,13 +225,13 @@ if __name__ == "__main__":
         weight_init = best_params.get('weight_init','range'),
         init_range = best_params.get('init_range',(-0.7,0.7)),
         early_stopping = True,
-        patience = best_params.get('patience',15),
+        patience = best_params.get('patience', 30)
     )
 
     # Train on full training set
     final_model.train(
         X_train_full, y_train_full,
-        epochs=150,
+        epochs=100,
         validation_data=(X_test, y_test),
         verbose=True,
         csv_log_path=final_full_csv
