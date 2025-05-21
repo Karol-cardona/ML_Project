@@ -34,7 +34,7 @@ def evaluate_regression(model, X_test, y_test):
 
     # MSE and MAE
     mse = np.mean((preds - y_test) ** 2)
-    mae = np.mean(np.abs(preds - y_test))
+    mee = mean_euclidean_error(preds, y_test)
 
     # R² score
     ss_res = np.sum((y_test - preds) ** 2)
@@ -43,7 +43,7 @@ def evaluate_regression(model, X_test, y_test):
 
     print(f"Test Loss: {test_loss:.6f}")
     print(f"MSE:       {mse:.6f}")
-    print(f"MAE:       {mae:.6f}")
+    print(f"MEE:       {mee:.6f}")
     print(f"R²:        {r2:.4f}")
 
-    return test_loss, mse, mae, r2
+    return test_loss, mse, mee, r2

@@ -43,10 +43,18 @@ class MatrixMLP:
         self.val_losses = []
         self.train_accuracies = []
         self.val_accuracies = []
+        self.val_mse = []  # Per tracciare MSE di validazione
+        self.val_mee = []  # Per tracciare MEE di validazione
         self.best_loss = np.inf
         self.no_improvement_count = 0
         self.best_weights = None
         self.best_biases = None
+
+        # distinguo tra classificazione e regressione
+        if output_activation in ('softmax',) or (output_activation=='sigmoid' and self.n_outputs==1):
+            self.task_type = 'classification'
+        else:
+            self.task_type = 'regression'
 
         # Set random seed for reproducibility.
         np.random.seed(1)
@@ -66,7 +74,7 @@ class MatrixMLP:
                 self.weights[-1] = u if u.shape == self.weights[-1].shape else v
 
         # Optimizer-specific initialization.
-        if self.optimizer == 'adam':
+        if self.optimizer in ('adam', 'adamw'):
             self.adam_m = [np.zeros_like(w) for w in self.weights]
             self.adam_v = [np.zeros_like(w) for w in self.weights]
             self.adam_t = 0
@@ -200,12 +208,18 @@ class MatrixMLP:
         """
         Compute key metrics: accuracy, MSE, and MEE.
         """
-        if self.n_outputs > 1:
-            accuracy = np.mean(np.argmax(y_pred, axis=1)==np.argmax(y_true, axis=1))
-        else:
-            accuracy = np.mean((y_pred>=0.5).astype(int)==y_true)
-        mse = np.mean((y_pred-y_true)**2)
-        return {'accuracy': accuracy, 'mse': mse}
+        if self.task_type == 'classification':
+            # multiclass softmax o sigmoide binaria
+            if self.n_outputs > 1:
+                acc = np.mean(np.argmax(y_pred,axis=1)==np.argmax(y_true,axis=1))
+            else:
+                acc = np.mean((y_pred>=0.5).astype(int) == y_true)
+            return {'accuracy': acc}
+
+        else:  # regression
+            mse = np.mean((y_pred - y_true)**2)
+            mee = np.mean(np.sqrt(np.sum((y_pred - y_true)**2, axis=1)))
+            return {'mse': mse, 'mee': mee}
 
     def backward(self, cache, y_true):
         """
@@ -254,14 +268,65 @@ class MatrixMLP:
                         self.weights[i] += self.momentums[i]
                 else:
                     self.weights[i] -= self.learning_rate * grad_weights[i]
-            elif self.optimizer == 'adam':
+            elif self.optimizer == 'rprop':
+                # Rprop: update step-size per-weight based on sign of gradient
+                if not hasattr(self, 'rprop_delta'):
+                    # initialize step sizes
+                    self.rprop_delta = [np.full_like(w, 0.0125) for w in self.weights]
+                # parameters
+                eta_plus = 1.2
+                eta_minus = 0.5
+                delta_min = 1e-6
+                delta_max = 50
+                # maintain previous gradient
+                if not hasattr(self, 'rprop_prev_grad'):
+                    self.rprop_prev_grad = [np.zeros_like(w) for w in self.weights]
+                sign = grad_weights[i] * self.rprop_prev_grad[i]
+                # adapt delta
+                inc = sign > 0
+                dec = sign < 0
+                self.rprop_delta[i][inc] = np.minimum(self.rprop_delta[i][inc] * eta_plus, delta_max)
+                self.rprop_delta[i][dec] = np.maximum(self.rprop_delta[i][dec] * eta_minus, delta_min)
+                # weight update
+                self.weights[i] -= np.sign(grad_weights[i]) * self.rprop_delta[i]
+                # reset gradient if changed sign
+                self.rprop_prev_grad[i][dec] = 0
+                # store prev grad
+                self.rprop_prev_grad[i] = grad_weights[i].copy()
+            elif self.optimizer == 'quickprop':
+                # QuickProp: uses second-order approximation to accelerate
+                if not hasattr(self, 'qp_prev_grad'):
+                    self.qp_prev_grad = [np.zeros_like(w) for w in self.weights]
+                    self.qp_prev_update = [np.zeros_like(w) for w in self.weights]
+                # small epsilon to avoid division by zero
+                eps = 1e-8
+                delta = self.qp_prev_update[i]
+                grad = grad_weights[i]
+                prev = self.qp_prev_grad[i]
+                # compute update
+                qp_update = - (grad / (prev - grad + eps)) * delta
+                # fallback to SGD if ratio unstable
+                mask = np.abs(qp_update) > 1e3
+                qp_update[mask] = -self.learning_rate * grad[mask]
+                self.weights[i] += qp_update
+                # save for next iter
+                self.qp_prev_update[i] = qp_update
+                self.qp_prev_grad[i] = grad.copy()
+            elif self.optimizer == 'adam' or self.optimizer == 'adamw':
+                # Adam and AdamW
                 self.adam_t += 1
                 beta1, beta2 = self.momentum, 0.999
-                self.adam_m[i] = beta1 * self.adam_m[i] + (1-beta1) * grad_weights[i]
-                self.adam_v[i] = beta2 * self.adam_v[i] + (1-beta2) * (grad_weights[i]**2)
-                m_hat = self.adam_m[i] / (1 - beta1**self.adam_t)
-                v_hat = self.adam_v[i] / (1 - beta2**self.adam_t)
-                self.weights[i] -= self.learning_rate * m_hat / (np.sqrt(v_hat) + 1e-8)
+                # m and v update
+                self.adam_m[i] = beta1 * self.adam_m[i] + (1 - beta1) * grad_weights[i]
+                self.adam_v[i] = beta2 * self.adam_v[i] + (1 - beta2) * (grad_weights[i] ** 2)
+                m_hat = self.adam_m[i] / (1 - beta1 ** self.adam_t)
+                v_hat = self.adam_v[i] / (1 - beta2 ** self.adam_t)
+                if self.optimizer == 'adamw':
+                    # decoupled weight decay
+                    self.weights[i] -= self.learning_rate * (m_hat / (np.sqrt(v_hat) + 1e-8) + self.reg_lambda * self.weights[i])
+                else:
+                    self.weights[i] -= self.learning_rate * (m_hat / (np.sqrt(v_hat) + 1e-8))
+            #Update biases
             self.biases[i] -= self.learning_rate * grad_biases[i]
 
             clip_val = 5.0
@@ -314,9 +379,14 @@ class MatrixMLP:
             if X_val is not None:
                 y_val_pred, _ = self.forward(X_val, training=False)
                 val_loss = self.compute_loss(y_val_pred, y_val)
-                val_acc = self.compute_metrics(y_val_pred, y_val)['accuracy']
+                val_metrics = self.compute_metrics(y_val_pred, y_val)
+                val_acc = val_metrics['accuracy']
+                val_mse = val_metrics['mse']
+                val_mee = val_metrics['mee']
                 self.val_losses.append(val_loss)
                 self.val_accuracies.append(val_acc)
+                self.val_mse.append(val_mse)  # Salva MSE di validazione
+                self.val_mee.append(val_mee)  # Salva MEE di validazione
 
                 # Early stopping check
                 if val_loss < self.best_loss:
