@@ -280,7 +280,8 @@ if __name__ == "__main__":
 
     # Plot learning curves with training loss e validation metrics (MSE e MEE)
     plot_cup_regression(
-        final_model.train_losses,
+        final_model.train_mse,
+        final_model.train_mee,
         final_model.val_mse,
         final_model.val_mee,
         title_mse='CUP MSE curve',

@@ -35,14 +35,14 @@ def plot_learning_curve(train_losses, val_losses, train_accuracies, val_accuraci
     plt.tight_layout()
     plt.show()
 
-def plot_cup_regression(train_losses, val_mse, val_mee,
+def plot_cup_regression(train_mse, train_mee, val_mse, val_mee,
                         title_mse='CUP MSE Curve', title_mee='CUP MEE Curve',
                         model=None, csv_path=None):
 
     fig, (ax1, ax2) = plt.subplots(1,2, figsize=(14,5))
 
     # Plot MSE
-    ax1.plot(train_losses, label='Training Loss', color='blue')
+    ax1.plot(train_mse, label='Training Loss', color='blue')
     if val_mse is not None:
         ax1.plot(val_mse, label='Validation MSE', color='orange', linewidth=2)
     ax1.set_xlabel('Epochs', fontsize=12)
@@ -53,7 +53,7 @@ def plot_cup_regression(train_losses, val_mse, val_mee,
     ax1.legend(fontsize=10)
 
     # Plot MEE
-    ax2.plot(train_losses, label='Training Loss', color='blue')
+    ax2.plot(train_mee, label='Training Loss', color='blue')
     if val_mee is not None:
         ax2.plot(val_mee, label='Validation MEE', color='green', linewidth=2)
     ax2.set_xlabel('Epochs', fontsize=12)

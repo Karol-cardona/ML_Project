@@ -43,15 +43,17 @@ class MatrixMLP:
         self.val_losses = []
         self.train_accuracies = []
         self.val_accuracies = []
-        self.val_mse = []  # Per tracciare MSE di validazione
-        self.val_mee = []  # Per tracciare MEE di validazione
+        self.train_mse = []
+        self.train_mee = []
+        self.val_mse = []
+        self.val_mee = []
         self.best_loss = np.inf
         self.no_improvement_count = 0
         self.best_weights = None
         self.best_biases = None
 
         # distinguo tra classificazione e regressione
-        if output_activation in ('softmax',) or (output_activation=='sigmoid' and self.n_outputs==1):
+        if output_activation in ('softmax',) or output_activation=='sigmoid':
             self.task_type = 'classification'
         else:
             self.task_type = 'regression'
@@ -371,22 +373,47 @@ class MatrixMLP:
                 batch_loss = self.compute_loss(y_pred, y_batch)
                 epoch_loss += batch_loss * (end - start) / n_samples
                 metrics = self.compute_metrics(y_pred, y_batch)
-                epoch_accuracy += metrics['accuracy'] * (end - start) / n_samples
+                if 'accuracy' in metrics:
+                    epoch_accuracy += metrics['accuracy'] * (end - start) / n_samples
                 self.backward(cache, y_batch)
             self.train_losses.append(epoch_loss)
             self.train_accuracies.append(epoch_accuracy)
+
+            if self.task_type == 'regression':
+                y_tr_pred, _ = self.forward(X_train, training=False)
+                train_metrics = self.compute_metrics(y_tr_pred, y_train)
+                train_mse = train_metrics['mse']
+                train_mee = train_metrics['mee']
+                # crea due liste parallelle a train_losses/val_mse/val_mee
+                if not hasattr(self, 'train_mse'):
+                    self.train_mse = []
+                    self.train_mee = []
+                self.train_mse.append(train_mse)
+                self.train_mee.append(train_mee)
 
             if X_val is not None:
                 y_val_pred, _ = self.forward(X_val, training=False)
                 val_loss = self.compute_loss(y_val_pred, y_val)
                 val_metrics = self.compute_metrics(y_val_pred, y_val)
-                val_acc = val_metrics['accuracy']
-                val_mse = val_metrics['mse']
-                val_mee = val_metrics['mee']
                 self.val_losses.append(val_loss)
-                self.val_accuracies.append(val_acc)
-                self.val_mse.append(val_mse)  # Salva MSE di validazione
-                self.val_mee.append(val_mee)  # Salva MEE di validazione
+
+                if self.task_type == 'classification':
+                    val_acc = val_metrics['accuracy']
+                    self.val_accuracies.append(val_acc)
+                    self.val_mse.append(None)
+                    self.val_mee.append(None)
+
+                else:  # regression
+                    self.val_accuracies.append(None)
+
+                if self.task_type == 'regression':
+                    val_mse = val_metrics['mse']
+                    val_mee = val_metrics['mee']
+                    self.val_mse.append(val_mse)
+                    self.val_mee.append(val_mee)
+                else:
+                    self.val_mse.append(None)
+                    self.val_mee.append(None)
 
                 # Early stopping check
                 if val_loss < self.best_loss:
@@ -404,9 +431,23 @@ class MatrixMLP:
                         break
 
                 if verbose:
-                    print(f"Epoch {epoch+1}/{epochs} - Train Loss: {epoch_loss:.4f}, Train Acc: {epoch_accuracy:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+                    if self.task_type == 'classification':
+                        print(f"Epoch {epoch+1}/{epochs} - "
+                              f"Train Loss: {epoch_loss:.4f}, Train Acc: {epoch_accuracy:.4f} | "
+                              f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+                    else:   # regressione
+                        print(f"Epoch {epoch+1}/{epochs} - "
+                              f"Train Loss: {epoch_loss:.4f} | "
+                              f"Val Loss: {val_loss:.4f}, Val MSE: {val_mse:.4f}, Val MEE: {val_mee:.4f}")
                 if csv_log_path is not None:
-                    self._append_csv_log(csv_log_path, epoch+1, epoch_loss, epoch_accuracy, val_loss, val_acc)
+                    self._append_csv_log(
+                        csv_log_path,
+                        epoch+1,
+                        epoch_loss,
+                        epoch_accuracy if self.task_type=='classification' else None,
+                        val_loss,
+                        val_acc if self.task_type=='classification' else None
+                    )
 
     def predict(self, X):
         """
