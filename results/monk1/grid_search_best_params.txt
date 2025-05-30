@@ -3,13 +3,13 @@ n_hidden: [4]
 learning_rate: 0.16
 dropout_rate: 0.0
 momentum: 0.9000000000000001
-activation: tanh
+activation: sigmoid
 optimizer: sgd
 reg_lambda: 0.0
 l1_lambda: 0.0
 lr_decay: 0.0
-batch_size: 8
+batch_size: 2
 weight_init: gaussian
 init_range: (-0.1, 0.1)
-Validation Loss: 2.9716335132987345e-05
+Validation Loss: 0.0019621865922081904
 Validation Accuracy: 1.0

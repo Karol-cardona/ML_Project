@@ -8,21 +8,6 @@ from plotting import plot_learning_curve
 from evaluation import evaluate_model
 from search_utils import random_search, create_focused_param_grid, grid_search
 
-# Define the hyperparameter space for the initial random search
-initial_param_space = {
-    'n_hidden': [[3],[4]],
-    'learning_rate': list(np.arange(0.01, 0.2, 0.15)),
-    'dropout_rate': list(np.arange(0.0, 0.3, 0.05)),
-    'momentum': list(np.arange(0.7, 0.9, 0.05)),
-    'activation': ['sigmoid'],
-    'optimizer': ['sgd'],
-    'reg_lambda': [0.0],
-    'l1_lambda': [0.0],
-    'lr_decay': [0.0],
-    'batch_size': [2, 4, 8],
-    'weight_init': ['gaussian', 'he', 'glorot'],
-    'init_range': [(-0.1, 0.1), (-0.5, 0.5)],
-}
 
 def train_and_evaluate_model(X_train, y_train, X_val, y_val, params, epochs=50):
     """
@@ -45,8 +30,8 @@ def train_and_evaluate_model(X_train, y_train, X_val, y_val, params, epochs=50):
         batch_size=params['batch_size'],
         weight_init=params.get('weight_init','range'),
         init_range=params.get('init_range',(-0.7,0.7)),
-        early_stopping=True,
-        patience=params.get('patience',30)
+        early_stopping=False,
+        patience=params.get('patience',100)
     )
 
     # Train the model quietly
@@ -93,8 +78,8 @@ def kfold_split(X, y, k=5, shuffle=True, random_state=None):
 
     return folds
 
-if __name__ == "__main__":
-    monk = 2
+def training(dataset, initial_param_space):
+    monk = dataset
 
     # 1) Directory of the folder monk
     base_dir = os.path.join("results", f"monk{monk}")
@@ -135,7 +120,7 @@ if __name__ == "__main__":
         random_results = random_search(
             X_train, y_train, X_val, y_val,
             initial_param_space,
-            n_trials=100,
+            n_trials=200,
             epochs=50,
             train_eval_fn=train_and_evaluate_model,
             result_dir=base_dir
@@ -149,7 +134,7 @@ if __name__ == "__main__":
         focused_param_grid = create_focused_param_grid(
             top_results,
             n_top=20,
-            max_combinations=100
+            max_combinations=200
         )
 
         # 4c) Conduct grid search on the narrowed parameter grid
@@ -181,8 +166,8 @@ if __name__ == "__main__":
             batch_size = best_params.get('batch_size',32),
             weight_init = best_params.get('weight_init','range'),
             init_range = best_params.get('init_range',(-0.5,0.5)),
-            early_stopping = True,
-            patience = best_params.get('patience', 30)
+            early_stopping = False,
+            patience = best_params.get('patience', 100)
         )
 
         final_model.train(
@@ -224,14 +209,14 @@ if __name__ == "__main__":
         batch_size = best_params.get('batch_size',32),
         weight_init = best_params.get('weight_init','range'),
         init_range = best_params.get('init_range',(-0.7,0.7)),
-        early_stopping = True,
-        patience = best_params.get('patience', 30)
+        early_stopping = False,
+        patience = best_params.get('patience', 100)
     )
 
     # Train on full training set
     final_model.train(
         X_train_full, y_train_full,
-        epochs=100,
+        epochs=200,
         validation_data=(X_test, y_test),
         verbose=True,
         csv_log_path=final_full_csv
