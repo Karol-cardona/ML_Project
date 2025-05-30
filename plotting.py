@@ -60,7 +60,7 @@ def plot_cup_regression(train_mse, train_mee, val_mse, val_mee,
     ax2.set_ylabel('Loss / MEE', fontsize=12)
     ax2.set_title(title_mee, fontsize=12)
     ax2.set_xlim(0, 100)
-    ax2.set_ylim(0, 25)
+    ax2.set_ylim(0, 10)
     ax2.legend(fontsize=10)
 
     plt.tight_layout()
