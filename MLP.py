@@ -465,8 +465,18 @@ class MatrixMLP:
 
     def _append_csv_log(self, csv_path, epoch, train_loss, train_acc, val_loss, val_acc):
         """Append epoch results to the CSV log file."""
+        # Prepara le stringhe solo se non None
+        train_acc_str = f"{train_acc:.4f}" if train_acc is not None else ""
+        val_acc_str   = f"{val_acc:.4f}"   if val_acc   is not None else ""
+        train_loss_str = f"{train_loss:.6f}"
+        val_loss_str   = f"{val_loss:.6f}" if val_loss   is not None else ""
+
         with open(csv_path, 'a', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow([epoch, f"{train_loss:.6f}", f"{train_acc:.4f}",
-                             f"{val_loss:.6f}" if val_loss is not None else "",
-                             f"{val_acc:.4f}" if val_acc is not None else ""])
+            writer.writerow([
+                epoch,
+                train_loss_str,
+                train_acc_str,
+                val_loss_str,
+                val_acc_str
+            ])
