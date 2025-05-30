@@ -16,7 +16,7 @@ def random_search(X_train, y_train, X_val, y_val, param_space, n_trials=50, epoc
     Perform a randomized hyperparameter search.
     """
     # Path to CSV log for random search results
-    csv_path = os.path.join(result_dir, "monk_random_search.csv")
+    csv_path = os.path.join(result_dir, "random_search.csv")
     ensure_csv_exists(csv_path, is_random_search=True)
 
     # Load any cached results to skip duplicate evaluations
@@ -118,7 +118,7 @@ def grid_search(X_train, y_train, X_val, y_val, param_grid, epochs=50, train_eva
     Exhaustive grid search over a parameter grid, with caching and global best update.
     """
 
-    csv_path = os.path.join(result_dir, "monk_grid_search.csv")
+    csv_path = os.path.join(result_dir, "grid_search.csv")
     ensure_csv_exists(csv_path)
     cache = read_csv_cache(csv_path)
 
