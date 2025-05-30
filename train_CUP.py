@@ -10,19 +10,19 @@ from search_utils import random_search, create_focused_param_grid, grid_search
 
 # Define the hyperparameter space for the initial random search
 initial_param_space = {
-    'n_hidden': [[5], [6], [5, 5], [8, 4]],
-    'learning_rate': list(np.arange(0.0001, 0.01, 0.0005)),
-    'reg_lambda': list(np.arange(0.0, 0.01, 0.001)),
-    'l1_lambda': list(np.arange(0.0, 0.05, 0.001)),
-    'dropout_rate': list(np.arange(0.0, 0.2, 0.02)),
+    'n_hidden': [[60, 60], [80, 60], [100,70], [120, 80],[150, 100, 50], [200, 200], [50, 50, 50]],
+    'learning_rate': list(np.logspace(-4, -3, 8)),
+    'reg_lambda': [0.0, 1e-5, 1e-4, 1e-2, 5e-4, 1e-3, 2e-3],
+    'l1_lambda': [0.0, 1e-4, 5e-4, 1e-3, 1e-5],
+    'dropout_rate': [0.0, 0.1, 0.2, 0.3],
     'momentum': [0.7, 0.8, 0.9],
-    'activation': ['sigmoid', 'tanh', 'relu', 'leaky_relu', 'elu'],
-    'optimizer': ['sgd', 'adam'],
-    'lr_decay': [0.0, 0.1, 0.2],
-    'batch_size': [16, 32],
-    'weight_init': ['gaussian', 'xavier', 'he', 'glorot', 'orthogonal','range'],
-    'init_range': [(-0.1, 0.1), (-0.5, 0.5)],
-    'patience': [ 10, 20, 30]
+    'activation': ['sigmoid', 'relu', 'leaky_relu', 'elu'],
+    'optimizer': ['sgd', 'adam', 'adamw', 'quickprop', 'rprop_prev_grad'],
+    'lr_decay': [0.0,  1e-4, 1e-3],
+    'batch_size': [8, 16, 32, 64, 128],
+    'weight_init': ['xavier', 'he', 'glorot', 'orthogonal','range'],
+    'init_range': [(-0.05, 0.05)],
+    'patience': [50, 100, 150]
 }
 
 def train_and_evaluate_model(X_train, y_train, X_val, y_val, params, epochs=50):
@@ -39,14 +39,14 @@ def train_and_evaluate_model(X_train, y_train, X_val, y_val, params, epochs=50):
         reg_lambda=params['reg_lambda'],
         l1_lambda=params.get('l1_lambda',0.0),
         dropout_rate=params['dropout_rate'],
-        momentum=params.get('momentum', 0.0),
+        momentum=params.get('momentum', 0.9),
         optimizer=params['optimizer'],
         lr_decay=params['lr_decay'],
         batch_size=params.get('batch_size', X_train.shape[0]),
         weight_init=params.get('weight_init', 'range'),
         init_range=params.get('init_range', (0.0, 0.05)),
         early_stopping=True,
-        patience=params.get('patience', 15)
+        patience=params.get('patience', 100)
     )
 
     # Train without verbose output
@@ -93,6 +93,32 @@ def kfold_split(X, y, k=5, shuffle=True, random_state=None):
         current = stop
     return splits
 
+# Define a utility for an 80/20 split without using scikit-learn
+def train_val_split(X, y, val_fraction=0.2, shuffle=True, random_state=None):
+    """
+    Split arrays X and y into training and validation sets by a given fraction.
+    Returns: X_train, X_val, y_train, y_val
+    """
+    if random_state is not None:
+        random.seed(random_state)
+        np.random.seed(random_state)
+
+    n_samples = X.shape[0]
+    indices = np.arange(n_samples)
+    if shuffle:
+        np.random.shuffle(indices)
+
+    n_val = int(np.floor(val_fraction * n_samples))
+    val_idx = indices[:n_val]
+    train_idx = indices[n_val:]
+
+    X_train = X[train_idx]
+    y_train = y[train_idx]
+    X_val = X[val_idx]
+    y_val = y[val_idx]
+
+    return X_train, X_val, y_train, y_val
+
 if __name__ == "__main__":
     # 1) Configuration
     base_dir = os.path.join("results", "cup")
@@ -129,8 +155,8 @@ if __name__ == "__main__":
             X_train, y_train,
             X_val, y_val,
             initial_param_space,
-            n_trials=50,
-            epochs=50,
+            n_trials=150,
+            epochs=100,
             train_eval_fn=train_and_evaluate_model,
             result_dir=base_dir
         )
@@ -143,15 +169,15 @@ if __name__ == "__main__":
         # 4b) Build a focused grid around the top-5 results
         focused_param_grid = create_focused_param_grid(
             top_results,
-            n_top=5,
-            max_combinations=30)
+            n_top=10,
+            max_combinations=50)
 
         # 4c) Conduct grid search on the narrowed parameter grid
         best_params, best_val_loss, best_val_acc = grid_search(
             X_train, y_train,
             X_val, y_val,
             focused_param_grid,
-            epochs=100,
+            epochs=120,
             train_eval_fn=train_and_evaluate_model,
             result_dir=base_dir
         )
@@ -174,30 +200,41 @@ if __name__ == "__main__":
             lr_decay = best_params['lr_decay'],
             batch_size=best_params.get('batch_size',32),
             weight_init=best_params.get('weight_init','xavier'),
-            init_range=best_params.get('init_range',(-0.1,0.1)),
+            init_range=best_params.get('init_range',(-0.05, 0.05)),
             early_stopping=True,
-            patience=best_params.get('patience',15)
+            patience=best_params.get('patience',100)
         )
 
         final_model.train(
             X_train, y_train,
-            epochs=100,
+            epochs=200,
             validation_data=(X_val, y_val),
             verbose=True,
             csv_log_path=final_csv
         )
 
         # Evaluate and record performance on the validation split mse e mee
-        loss, mse, mae, r2 = evaluate_regression(final_model, X_val, y_val)
-        fold_results.append((loss, mse, mae, r2))
-        print(f"Fold {fold} → Val Loss: {loss:.4f}, Val MSE: {mse:.4f}, MAE: {mae:.4f}, R²: {r2:.4f}")
+        loss, mse, mee, r2 = evaluate_regression(final_model, X_val, y_val)
+        fold_results.append((loss, mse, mee, r2))
+        print(f"Fold {fold} → Val Loss: {loss:.4f}, Val MSE: {mse:.4f}, MEE: {mee:.4f}, R²: {r2:.4f}")
 
     # 6) Compute and display average cross-validation performance
     avg_loss = np.mean([res[0] for res in fold_results])
     avg_mse = np.mean([res[1] for res in fold_results])
     print(f"\n=== CV Results ===\nAvg Loss: {avg_loss:.4f}\nAvg MSE: {avg_mse:.4f}")
 
-    # 7) Final training on full set
+    # 7) Final training on full set with an 80/20 split for validation
+    # Split the full training data into 80% train and 20% validation
+    X_train_final, X_val_final, y_train_final, y_val_final = train_val_split(
+        X_train_full, y_train_full,
+        val_fraction=0.2,
+        random_state=42,
+        shuffle=True
+    )
+    print(f"Final train: {X_train_final.shape}, Final val: {X_val_final.shape}")
+
+
+    # 8) Final training on full set
     final_full_csv = os.path.join(base_dir, "cup_final_log.csv")
     final_model = MatrixMLP(
         n_inputs=X_train_full.shape[1],
@@ -214,20 +251,25 @@ if __name__ == "__main__":
         lr_decay = best_params['lr_decay'],
         batch_size=best_params.get('batch_size',32),
         weight_init=best_params.get('weight_init','xavier'),
-        init_range=best_params.get('init_range',(-0.1,0.1)),
+        init_range=best_params.get('init_range',(-0.05, 0.05)),
         early_stopping=True,
-        patience=best_params.get('patience',15)
+        patience=best_params.get('patience',100)
     )
 
     # Train on full training set
     final_model.train(
         X_train_full, y_train_full,
-        epochs=100,
+        epochs=200,
+        validation_data=(X_val_final, y_val_final),
         verbose=True,
         csv_log_path=final_full_csv
     )
 
-    # Predict on test set and save
+    # Evaluate performance on the held-out validation set
+    loss_full, mse_full, mee_full, r2_full = evaluate_regression(final_model, X_val_final, y_val_final)
+    print(f"Held-out Validation → Loss: {loss_full:.4f}, MSE: {mse_full:.4f}, MEE: {mee_full:.4f}, R²: {r2_full:.4f}")
+
+    # 9) Predict on test set and save
     preds = final_model.predict(X_test)
     out_file = os.path.join(base_dir, "cup_blind_predictions.csv")
     with open(out_file, 'w') as f:
@@ -236,8 +278,12 @@ if __name__ == "__main__":
             f.write(f"{idx},{p[0]},{p[1]},{p[2]}\n")
     print(f"Saved test predictions to {out_file}")
 
-    # Plot learning curves with test metrics
+    # Plot learning curves with training loss e validation metrics (MSE e MEE)
     plot_cup_regression(
-        final_model.train_losses,
-        title_loss='CUP Loss Curve'
+        final_model.train_mse,
+        final_model.train_mee,
+        final_model.val_mse,
+        final_model.val_mee,
+        title_mse='CUP MSE curve',
+        title_mee='CUP MEE curve'
     )
