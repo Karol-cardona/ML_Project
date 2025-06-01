@@ -1,16 +1,15 @@
 Best Hyperparameters:
-n_hidden: [4]
-n_hidden: [4]
+n_hidden: [3]
 learning_rate: 0.16
 dropout_rate: 0.0
-momentum: 0.8500000000000001
+momentum: 0.9000000000000001
 activation: sigmoid
 optimizer: sgd
 reg_lambda: 0.0
 l1_lambda: 0.0
-lr_decay: 0.7500000000000002
+lr_decay: 0.75
 batch_size: 2
 weight_init: gaussian
-init_range: (-0.1, 0.1)
-Validation Loss: 0.016909577210298635
-Validation Accuracy: 0.96
+init_range: (-0.5, 0.5)
+Validation Loss: 0.012803670461568717
+Validation Accuracy: 1.0

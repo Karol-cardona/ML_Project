@@ -266,8 +266,11 @@ if __name__ == "__main__":
     )
 
     # Evaluate performance on the held-out validation set
+    loss_full, mse_full, mee_full, r2_full = evaluate_regression(final_model, X_train_final, y_train_final)
+    print(f"\nTraining → Loss: {loss_full:.4f}, MSE: {mse_full:.4f}, MEE: {mee_full:.4f}, R²: {r2_full:.4f}")
+
     loss_full, mse_full, mee_full, r2_full = evaluate_regression(final_model, X_val_final, y_val_final)
-    print(f"Held-out Validation → Loss: {loss_full:.4f}, MSE: {mse_full:.4f}, MEE: {mee_full:.4f}, R²: {r2_full:.4f}")
+    print(f"Held-out Validation → Loss: {loss_full:.4f}, MSE: {mse_full:.4f}, MEE: {mee_full:.4f}, R²: {r2_full:.4f}\n")
 
     # 9) Predict on test set and save
     preds = final_model.predict(X_test)

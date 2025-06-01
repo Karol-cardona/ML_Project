@@ -5,7 +5,7 @@ import random
 from monk_loader import load_monk_data, one_hot_encode
 from MLP import MatrixMLP
 from plotting import plot_learning_curve
-from evaluation import evaluate_model
+from evaluation import evaluate_model, evaluate_regression
 from search_utils import random_search, create_focused_param_grid, grid_search
 
 
@@ -224,7 +224,12 @@ def training(dataset, initial_param_space):
 
     # Evaluate on test set and plot learning curves
     print("\nValutazione sul test set:")
+    print("******** TRAIN ********")
+    evaluate_model(final_model, X_train, y_train)
+    evaluate_regression(final_model, X_train, y_train)
+    print("******** TEST ********")
     evaluate_model(final_model, X_test, y_test)
+    evaluate_regression(final_model, X_test, y_test)
     plot_learning_curve(final_model.train_losses,
                         final_model.val_losses,
                         final_model.train_accuracies,
